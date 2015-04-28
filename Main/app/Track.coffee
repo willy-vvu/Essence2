@@ -1,7 +1,10 @@
 # This is actually a specialized class. Pull things out into a more generic class later.
-ChaseCamera = require "ChaseCamera"
-TrackSpline = require "TrackSpline"
-Utils = require "Utils"
+ChaseCamera = require("ChaseCamera")
+TrackSpline = require("TrackSpline")
+Utils = require("Utils")
+require("OBJLoader")
+SkyShader = require "shader/SkyShader"
+
 tempQuaternion = new THREE.Quaternion()
 tempVector = new THREE.Vector3()
 module.exports = class Track extends THREE.Scene
@@ -9,38 +12,34 @@ module.exports = class Track extends THREE.Scene
     super
     @loaded = false
     @game.preloader.resetProgress()
-    @game.preloader.register("models/Concept 2.json")
+    @game.preloader.register("models/Concept 2.obj")
     @game.preloader.register("models/Concept 2.curves.json")
     @game.preloader.register("models/Ship v3.json")
     @game.preloader.status = ()=>
-        console.log("#{this.game.preloader.loaded} of #{this.game.preloader.total}")
+      #console.log("#{this.game.preloader.loaded} of #{this.game.preloader.total}")
     @game.preloader.done = ()=>
-        console.log("done")
-        @init()
-        @loaded = true
+      #console.log("done")
+      @init()
+      @loaded = true
     @game.preloader.error = (error)=>
-        console.log(error)
+      console.log(error)
     @game.preloader.startAll()
 
 
   init: ()->
-    scene = THREE.ObjectLoader::parse(JSON.parse(@game.preloader.get("models/Concept 2.json")))
-    @children = scene.children
-    track.children[0].rotation.set(-Math.PI/2, 0, 0)
-
-    @traverse (child)->
-      if child.name is "Plane"
-        child.children[0].material.color = 0x224466
-
-    dlight = new THREE.DirectionalLight(0xFFFFFF, 1.5)
+    dlight = new THREE.DirectionalLight(0xFFFFFF, 1.4)
     dlight.position.set(1, 1, -1)
-    scene.add(dlight)
-    scene.add(new THREE.AmbientLight(0x333333))
+    @add(dlight)
+    dlight2 = new THREE.DirectionalLight(0xFFFFFF, 0.6)
+    dlight2.position.set(1, -1, -1)
+    @add(dlight2)
+    @add(new THREE.AmbientLight(0x111111))
 
     @shipHolder = new THREE.Object3D()
     @add(@shipHolder)
 
-    @camera = new THREE.PerspectiveCamera(60, @game.aspect, 3, 1000)
+    @camera = new THREE.PerspectiveCamera(60, @game.aspect, 3, 50000)
+    @camera.logarithamicDepthBuffer = true
     #@shipHolder.add(@camera)
     
     shipData = THREE.ObjectLoader::parse(JSON.parse(@game.preloader.get("models/Ship v3.json")))
@@ -48,6 +47,8 @@ module.exports = class Track extends THREE.Scene
     @shipHolder.add(ship)
     ship.position.set(0, 1.2, 0)
     ship.rotation.y = Math.PI
+    ship.children[0].material =
+    ship.children[1].material = new THREE.MeshBasicMaterial(color: 0)
     ship.children[0].material.side =
     ship.children[1].material.side = THREE.DoubleSide
     ship.scale.multiplyScalar(0.8)
@@ -58,9 +59,12 @@ module.exports = class Track extends THREE.Scene
     @add(@cameraHolder)
     
     @cameraHolder.add(@camera)
-    @camera.position.set(0, 0, .1)
+    @camera.position.set(0, 0, 10)
     #@camera.position.set(0,3.5,10)
     @controls = new THREE.OrbitControls(@camera)
+
+    @addScene()
+
 
     #@shipHolder.position.set(0, 0, 0)
 
@@ -70,9 +74,9 @@ module.exports = class Track extends THREE.Scene
     @lateral = 0
     @lateralTarget = 0
 
-    @traverse (child)->
-      if child instanceof THREE.Mesh and child.material?
-        child.material = new THREE.MeshLambertMaterial(child.material)
+    # @traverse (child)->
+    #   if child instanceof THREE.Mesh and child.material?
+    #     child.material = new THREE.MeshLambertMaterial(child.material)
 
     document.body.addEventListener "keydown", (event)=>
       switch event.keyCode
@@ -80,10 +84,14 @@ module.exports = class Track extends THREE.Scene
           @lateralTarget-=6
         when 39
           @lateralTarget+=6
+        when 40
+          @pos-=30
+        when 38
+          @pos+=30
 
 
   update: ()->
-    @pos+=50/60
+    #@pos+=50/60
     factor = (@pos/800)%1
     newPoint = tempVector.copy(@trackSpline.getNaturalSplinePoint(factor))
     direction = @trackSpline.getNaturalSplineDirection(newPoint, factor)
@@ -101,6 +109,63 @@ module.exports = class Track extends THREE.Scene
     @shipHolder.quaternion.slerp(tempQuaternion, 0.8)
     @cameraHolder.update()
 
+  render: ()->
+    @camera.updateMatrixWorld()
+
   resize: ()->
     @camera.aspect = @game.aspect
     @camera.updateProjectionMatrix()
+
+  addScene: ()->
+    scene = THREE.OBJLoader::parse(@game.preloader.get("models/Concept 2.obj"))
+    
+    groups = [
+      "Static_Environment"
+      "Track_Environment"
+      "Track"
+      "Sea"
+    ]
+
+    # Count total vertices
+   
+    counts = (0 for group in groups)
+    scene.traverse (child)->
+      if child instanceof THREE.Mesh
+        index = groups.indexOf(child.material.name)
+        if index >= 0
+          counts[index] += child.geometry.attributes.position.array.length
+
+    # Build merged geometry holders
+    geometries = for count in counts
+      geo = new THREE.BufferGeometry()
+      geo.addAttribute("position", new THREE.BufferAttribute(new Float32Array(count), 3))
+      geo.addAttribute("normal", new THREE.BufferAttribute(new Float32Array(count), 3))
+      geo
+
+    # Merge all geometry into the holders
+    counts = (0 for group in groups)
+    scene.traverse (child)->
+      if child instanceof THREE.Mesh
+        index = groups.indexOf(child.material.name)
+        if index >= 0
+          for i in [0...child.geometry.attributes.position.array.length]
+            geometries[index].attributes.position.array[counts[index]] = child.geometry.attributes.position.array[i]
+            geometries[index].attributes.normal.array[counts[index]] = child.geometry.attributes.normal.array[i]
+            counts[index]++
+
+
+    materials = [
+      new THREE.MeshBasicMaterial(color: 0)
+      new THREE.MeshBasicMaterial(color: 0)
+      new THREE.MeshBasicMaterial(color: 0)
+      new THREE.MeshBasicMaterial(color: 0)
+    ]
+    # Add them to the scene
+    for i in [0...geometries.length]
+      @add(new THREE.Mesh(geometries[i], materials[i]))
+   
+
+    # Add sky
+    sky = new THREE.Mesh(new THREE.BoxGeometry(40000, 40000, 40000), new SkyShader({side: THREE.BackSide}))
+    @add(sky)
+    #console.log geometries, scene

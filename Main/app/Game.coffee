@@ -4,7 +4,6 @@ Preloader = require "Preloader"
 module.exports = class Game
   constructor: (@element) ->
     @renderer= new THREE.WebGLRenderer()
-    @renderer.setClearColor(0x22aaff)
     @width = 0
     @height = 0
     @aspect = 0
@@ -16,6 +15,7 @@ module.exports = class Game
   render: ->
     if @track.loaded
       @track.update()
+      @track.render()
       @renderer.render(@track, @track.camera)
 
   resize: ->

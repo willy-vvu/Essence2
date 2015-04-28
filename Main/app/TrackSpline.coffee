@@ -52,10 +52,8 @@ module.exports = class TrackSpline
     # Watch those references!
     existingFactor = Utils.clamp(existingFactor, 0, 1)
     tempVector.copy(existingPoint)
-    # This'll create discontinuity around .5... better than around 0
-    multiplier = if existingFactor<0.5 then 1 else -1
-    nextVector = @getNaturalSplinePoint(existingFactor + multiplier * delta)
-    nextVector.sub(tempVector).multiplyScalar(multiplier)
+    nextVector = @getNaturalSplinePoint((existingFactor + delta) % 1) # Assume cyclical spline
+    nextVector.sub(tempVector)
     return nextVector.normalize()
 
   getNaturalSplineFrame: (existingDirection, existingFactor)->
