@@ -4,6 +4,8 @@ TrackSpline = require("TrackSpline")
 Utils = require("Utils")
 require("OBJLoader")
 SkyShader = require "shader/SkyShader"
+APhysicalShader = require "shader/APhysicalShader"
+ToneMapShader = require "shader/ToneMapShader"
 
 tempQuaternion = new THREE.Quaternion()
 tempVector = new THREE.Vector3()
@@ -14,7 +16,7 @@ module.exports = class Track extends THREE.Scene
     @game.preloader.resetProgress()
     @game.preloader.register("models/Concept 2.obj")
     @game.preloader.register("models/Concept 2.curves.json")
-    @game.preloader.register("models/Ship v3.json")
+    @game.preloader.register("models/Ship v3.obj")
     @game.preloader.status = ()=>
       #console.log("#{this.game.preloader.loaded} of #{this.game.preloader.total}")
     @game.preloader.done = ()=>
@@ -38,11 +40,11 @@ module.exports = class Track extends THREE.Scene
     @shipHolder = new THREE.Object3D()
     @add(@shipHolder)
 
-    @camera = new THREE.PerspectiveCamera(60, @game.aspect, 3, 50000)
+    @camera = new THREE.PerspectiveCamera(60, @game.aspect, 2, 50000)
     @camera.logarithamicDepthBuffer = true
     #@shipHolder.add(@camera)
     
-    shipData = THREE.ObjectLoader::parse(JSON.parse(@game.preloader.get("models/Ship v3.json")))
+    shipData = THREE.OBJLoader::parse(@game.preloader.get("models/Ship v3.obj"))
     ship = shipData
     @shipHolder.add(ship)
     ship.position.set(0, 1.2, 0)
@@ -54,13 +56,12 @@ module.exports = class Track extends THREE.Scene
     ship.scale.multiplyScalar(0.8)
 
     @cameraHolder = new ChaseCamera()
-    @cameraHolder.offset.set(0, 3.5, 6)
+    @cameraHolder.offset.set(0, 2.5, 1.5)
     @cameraHolder.target = @shipHolder
     @add(@cameraHolder)
     
     @cameraHolder.add(@camera)
     @camera.position.set(0, 0, 10)
-    #@camera.position.set(0,3.5,10)
     @controls = new THREE.OrbitControls(@camera)
 
     @addScene()
@@ -78,6 +79,8 @@ module.exports = class Track extends THREE.Scene
     #   if child instanceof THREE.Mesh and child.material?
     #     child.material = new THREE.MeshLambertMaterial(child.material)
 
+    @finalToneMap = new ToneMapShader()
+
     document.body.addEventListener "keydown", (event)=>
       switch event.keyCode
         when 37
@@ -92,18 +95,18 @@ module.exports = class Track extends THREE.Scene
 
   update: ()->
     #@pos+=50/60
-    factor = (@pos/800)%1
+    factor = (@pos/800)%%1
     newPoint = tempVector.copy(@trackSpline.getNaturalSplinePoint(factor))
     direction = @trackSpline.getNaturalSplineDirection(newPoint, factor)
     euler = @trackSpline.getNaturalSplineFrame(direction, factor)
-    if @pos%1600 >= 800
+    if @pos%%1600 >= 800
       euler.z+=Math.PI
     #console.log direction
     #direction.multiplyScalar(-1).add(@shipHolder.position)
     tempQuaternion.setFromEuler(euler)
     @shipHolder.position.copy(newPoint)
     @lateralTarget = Utils.clamp(@lateralTarget, -6, 6)
-    @lateral = Utils.lerp(@lateral, @lateralTarget, 0.1)
+    @lateral = Utils.lerp(@lateral, @lateralTarget, 0.2)
     tempVector.set(@lateral, 0, 0).applyQuaternion(tempQuaternion)
     @shipHolder.position.add(tempVector)
     @shipHolder.quaternion.slerp(tempQuaternion, 0.8)
@@ -111,6 +114,11 @@ module.exports = class Track extends THREE.Scene
 
   render: ()->
     @camera.updateMatrixWorld()
+    @game.composer.reset()
+    @game.composer.render(this, @camera)
+    @game.composer.pass(@finalToneMap)
+    @game.composer.toScreen()
+
 
   resize: ()->
     @camera.aspect = @game.aspect
@@ -155,9 +163,9 @@ module.exports = class Track extends THREE.Scene
 
 
     materials = [
-      new THREE.MeshBasicMaterial(color: 0)
-      new THREE.MeshBasicMaterial(color: 0)
-      new THREE.MeshBasicMaterial(color: 0)
+      new APhysicalShader()
+      new APhysicalShader()
+      new APhysicalShader(color: 0xFF8C00)
       new THREE.MeshBasicMaterial(color: 0)
     ]
     # Add them to the scene
