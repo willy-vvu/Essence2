@@ -1,8 +1,6 @@
 APhysicalShader = require("shader/APhysicalShader")
 module.exports = class SeaShader extends THREE.ShaderMaterial
-  constructor: (options)->
-    super
-    @vertexShader = """
+  @vertexShader: """
     varying vec2 vUv;
     varying vec3 vWorldPosition;
     void main() {
@@ -11,14 +9,17 @@ module.exports = class SeaShader extends THREE.ShaderMaterial
       gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
     }
     """
-    # threejs.org/examples/webgl_shaders_ocean.html
-    @fragmentShader = """
-    uniform sampler2D tReflect;
+  @fragmentShader: """
     uniform sampler2D tNormal;
     uniform vec2 resolution;
     uniform float time;
     varying vec2 vUv;
     varying vec3 vWorldPosition;
+    #define REALREFLECTIONS 1
+    #ifdef REALREFLECTIONS
+    uniform sampler2D tReflect;
+    #endif
+    #{require("shader/SkyShaderChunk")}
     float mdot(vec3 a, vec3 b){
       return max(0.0, dot(a, b));
     }
@@ -39,20 +40,30 @@ module.exports = class SeaShader extends THREE.ShaderMaterial
       vec3 cameraToWorld = vWorldPosition - cameraPosition;
       vec3 cameraView = normalize(cameraToWorld);
       
-      float groundFresnel = pow(1.0 - mdot(vec3(0.0, 1.0, 0.0), -cameraView), 20.0);
+      float horizon = clamp((length(vWorldPosition) - 4000.0) / 8000.0, 0.0, 1.0);
       vec3 specular = lightColor * pow(mdot(reflect(lightPosition, vec3(0.0, 1.0, 0.0)), cameraView), 50.0);
       float reflectance = pow(1.0 - mdot(normal, -cameraView), 2.0);
 
       vec2 coord = gl_FragCoord.xy / resolution;
       coord.y = 1.0 - coord.y;
-      vec3 reflectedColor = texture2D(tReflect, coord + normal.xz * (0.001 + 1.0 / length(cameraToWorld))).xyz;
+      vec3 reflectedColor =
+        #ifdef REALREFLECTIONS
+        texture2D(tReflect, normal.xz * (0.001 + 1.0 / length(cameraToWorld)) + coord).xyz;
+        #else
+        sky(cameraView);
+        #endif
 
       gl_FragColor = vec4(
-        mix(reflectedColor * (0.2 + 0.1 * mdot(lightPosition, normal)), reflectedColor + specular, min(1.0, reflectance + groundFresnel))
+        mix(mix(reflectedColor * (0.1 * mdot(lightPosition, normal) + 0.2), reflectedColor * 0.8 + specular, reflectance), sky(cameraView), horizon)
         , 1.0
       );
     }
     """
+  constructor: (options)->
+    super
+    @vertexShader = SeaShader.vertexShader
+    # threejs.org/examples/webgl_shaders_ocean.html
+    @fragmentShader = SeaShader.fragmentShader
     @uniforms = 
       tReflect: 
         type: "t"

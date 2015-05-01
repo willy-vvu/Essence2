@@ -1,14 +1,12 @@
 module.exports = class ToneMapShader extends THREE.ShaderMaterial
-  constructor: ()->
-    super
-    @vertexShader = """
+  @vertexShader: """
     varying vec2 vUv;
     void main() {
       vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
     }
     """
-    @fragmentShader = """
+  @fragmentShader: """
     uniform sampler2D tInput;
     varying vec2 vUv;
     vec3 pow(vec3 v, float e){
@@ -23,8 +21,10 @@ module.exports = class ToneMapShader extends THREE.ShaderMaterial
       gl_FragColor = vec4(pow(color, 0.454545455), 1.0 );
     }
     """
-      # float lum = dot(vec3(0.2126, 0.7152, 0.0722), color); // Wikipedia
-      # gl_FragColor = vec4(pow(color/(0.5 + lum), 0.454545455), 1.0 );
+  constructor: ()->
+    super
+    @vertexShader = ToneMapShader.vertexShader
+    @fragmentShader = ToneMapShader.fragmentShader
     @uniforms = 
       tInput: 
         type: "t"

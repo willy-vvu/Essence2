@@ -6,6 +6,7 @@ require("OBJLoader")
 SkyShader = require "shader/SkyShader"
 APhysicalShader = require "shader/APhysicalShader"
 ToneMapShader = require "shader/ToneMapShader"
+PaintShader = require "shader/PaintShader"
 SeaShader = require "shader/SeaShader"
 
 tempQuaternion = new THREE.Quaternion()
@@ -54,16 +55,18 @@ module.exports = class Track extends THREE.Scene
 
     #@shipHolder.add(@camera)
     
+    @envmapCamera = new THREE.CubeCamera(2, 50000, 512)
+    @envmapCamera.logarithamicDepthBuffer = true
+
     shipData = THREE.OBJLoader::parse(@game.preloader.get("models/Ship v3.obj"))
-    ship = shipData
-    @shipHolder.add(ship)
-    ship.position.set(0, 1.2, 0)
-    ship.rotation.y = Math.PI
-    ship.children[0].material =
-    ship.children[1].material = new THREE.MeshBasicMaterial(color: 0)
-    ship.children[0].material.side =
-    ship.children[1].material.side = THREE.DoubleSide
-    ship.scale.multiplyScalar(0.8)
+    @ship = shipData
+    @shipHolder.add(@ship)
+    @ship.position.set(0, 1.2, 0)
+    @ship.rotation.y = Math.PI
+    @ship.children[0].material = new PaintShader({color: 0xff0000, envmap: @envmapCamera.renderTarget})
+    @ship.children[1].material = new APhysicalShader(color: 0x555555)
+    @ship.scale.multiplyScalar(0.8)
+
 
     @cameraHolder = new ChaseCamera()
     @cameraHolder.offset.set(0, 2.5, 1.5)
@@ -71,7 +74,7 @@ module.exports = class Track extends THREE.Scene
     @add(@cameraHolder)
     
     @cameraHolder.add(@camera)
-    @camera.position.set(0, 0, 100)
+    @camera.position.set(0, 0, 10)
     @controls = new THREE.OrbitControls(@camera)
 
     @addScene()
@@ -105,7 +108,7 @@ module.exports = class Track extends THREE.Scene
     @time = 0
 
   update: ()->
-    #@pos+=50/60
+    @pos+=50/60
     factor = (@pos/800)%%1
     newPoint = tempVector.copy(@trackSpline.getNaturalSplinePoint(factor))
     direction = @trackSpline.getNaturalSplineDirection(newPoint, factor)
@@ -131,6 +134,8 @@ module.exports = class Track extends THREE.Scene
 
     @renderReflection()
 
+    @renderEnvironmentMap()
+
     @game.composer.reset()
     @game.composer.render(this, @camera)
     @game.composer.pass(@finalToneMap)
@@ -151,6 +156,14 @@ module.exports = class Track extends THREE.Scene
     @seaMesh.visible = true
     @seaMesh.material.uniforms.resolution.value.set(@game.width, @game.height)
     @seaMesh.material.uniforms.time.value = @time
+
+  renderEnvironmentMap: ()->
+    #if @time < 1
+    @ship.visible = false
+    @envmapCamera.position.copy(@shipHolder.position)
+    @envmapCamera.updateMatrixWorld(true)
+    @envmapCamera.updateCubeMap(@game.renderer, this)
+    @ship.visible = true
 
   resize: ()->
     @camera.aspect = @game.aspect
