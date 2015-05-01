@@ -14,7 +14,8 @@ module.exports = class APhysicalShader extends THREE.ShaderMaterial
       gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
 
       vec3 lightDirection = #{APhysicalShader.LIGHT_POSITION};
-      float lambertTop = max(0.0, dot(lightDirection, vNormal));
+      float lambertTop = dot(lightDirection, vNormal);
+      lambertTop = lambertTop < 0.0? -0.01 * lambertTop: lambertTop;
       float lambertBottom = 0.1 * max(0.0, dot(lightDirection * vec3(1.0, -1.0, 1.0), vNormal));
       lambert = lambertTop + lambertBottom;
     }
@@ -26,7 +27,13 @@ module.exports = class APhysicalShader extends THREE.ShaderMaterial
     varying float lambert;
     uniform vec3 color;
     #{require("shader/SkyShaderChunk")}
-    #{require("shader/HDRChunk")}
+    vec3 vmax(float value, vec3 vector){
+      return vec3(
+        max(value, vector.x),
+        max(value, vector.y),
+        max(value, vector.z)
+      );
+    }
     void main() {
       vec3 lightDirection = #{APhysicalShader.LIGHT_POSITION};
       vec3 lightColor = #{APhysicalShader.LIGHT_COLOR};
@@ -35,7 +42,7 @@ module.exports = class APhysicalShader extends THREE.ShaderMaterial
       vec3 reflectedLight = reflect(-lightDirection, vNormal);
       float specular = 0.2 * pow(max(0.0, -dot(reflectedLight, cameraView)), 2.0);
       float fresnel = 0.2 * pow(1.0 - max(0.0, -dot(vNormal, cameraView)), 5.0);
-      vec3 ambient = 0.1 * sky(vNormal);
-      gl_FragColor = vec4(toHDR(fresnel * color + lightColor * color * (specular + ambient + lambert)), 1.0);
+      vec3 ambient = 0.04 * vmax(0.0, 1.0 - (1.0 - sky(vNormal)) / 0.8);
+      gl_FragColor = vec4(fresnel * color + lightColor * color * (specular + ambient + lambert), 1.0);
     }
     """

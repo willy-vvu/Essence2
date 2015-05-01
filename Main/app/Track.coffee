@@ -6,6 +6,7 @@ require("OBJLoader")
 SkyShader = require "shader/SkyShader"
 APhysicalShader = require "shader/APhysicalShader"
 ToneMapShader = require "shader/ToneMapShader"
+SeaShader = require "shader/SeaShader"
 
 tempQuaternion = new THREE.Quaternion()
 tempVector = new THREE.Vector3()
@@ -42,6 +43,15 @@ module.exports = class Track extends THREE.Scene
 
     @camera = new THREE.PerspectiveCamera(60, @game.aspect, 2, 50000)
     @camera.logarithamicDepthBuffer = true
+
+    @reflectionCamera = new THREE.PerspectiveCamera(60, @game.aspect, 2, 50000)
+    @reflectionCamera.logarithamicDepthBuffer = true
+
+    @add(@reflectionCamera)
+    
+    @reflectionTexture = new THREE.WebGLRenderTarget() # {type: THREE.FloatType}
+    @reflectionTexture.setSize(1024, 1024)
+
     #@shipHolder.add(@camera)
     
     shipData = THREE.OBJLoader::parse(@game.preloader.get("models/Ship v3.obj"))
@@ -61,7 +71,7 @@ module.exports = class Track extends THREE.Scene
     @add(@cameraHolder)
     
     @cameraHolder.add(@camera)
-    @camera.position.set(0, 0, 10)
+    @camera.position.set(0, 0, 100)
     @controls = new THREE.OrbitControls(@camera)
 
     @addScene()
@@ -92,6 +102,7 @@ module.exports = class Track extends THREE.Scene
         when 38
           @pos+=30
 
+    @time = 0
 
   update: ()->
     #@pos+=50/60
@@ -112,17 +123,40 @@ module.exports = class Track extends THREE.Scene
     @shipHolder.quaternion.slerp(tempQuaternion, 0.8)
     @cameraHolder.update()
 
+    @time += 1/60
+
   render: ()->
+    @cameraHolder.updateMatrixWorld()
     @camera.updateMatrixWorld()
+
+    @renderReflection()
+
     @game.composer.reset()
     @game.composer.render(this, @camera)
     @game.composer.pass(@finalToneMap)
     @game.composer.toScreen()
+    # @game.renderer.render(this, @camera)
 
+  renderReflection: ()->
+    tempVector.setFromMatrixPosition(@camera.matrixWorld)
+    @reflectionCamera.position.copy(tempVector)
+    @reflectionCamera.position.y *= -1
+    # Reflect the quaternion
+    @reflectionCamera.quaternion.setFromRotationMatrix(@camera.matrixWorld)
+    @reflectionCamera.quaternion.x *= -1
+    @reflectionCamera.quaternion.z *= -1
+
+    @seaMesh.visible = false
+    @game.renderer.render(this, @reflectionCamera, @reflectionTexture)
+    @seaMesh.visible = true
+    @seaMesh.material.uniforms.resolution.value.set(@game.width, @game.height)
+    @seaMesh.material.uniforms.time.value = @time
 
   resize: ()->
     @camera.aspect = @game.aspect
     @camera.updateProjectionMatrix()
+    @reflectionCamera.aspect = @game.aspect
+    @reflectionCamera.updateProjectionMatrix()
 
   addScene: ()->
     scene = THREE.OBJLoader::parse(@game.preloader.get("models/Concept 2.obj"))
@@ -166,12 +200,16 @@ module.exports = class Track extends THREE.Scene
       new APhysicalShader()
       new APhysicalShader()
       new APhysicalShader(color: 0xFF8C00)
-      new THREE.MeshBasicMaterial(color: 0)
+      new SeaShader(reflectionTexture: @reflectionTexture)
     ]
+
     # Add them to the scene
-    for i in [0...geometries.length]
-      @add(new THREE.Mesh(geometries[i], materials[i]))
-   
+    meshes = for i in [0...geometries.length]
+      mesh = new THREE.Mesh(geometries[i], materials[i])
+      @add(mesh)
+      mesh
+
+    @seaMesh = meshes[3]
 
     # Add sky
     sky = new THREE.Mesh(new THREE.BoxGeometry(40000, 40000, 40000), new SkyShader({side: THREE.BackSide}))

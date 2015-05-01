@@ -11,7 +11,6 @@ module.exports = class ToneMapShader extends THREE.ShaderMaterial
     @fragmentShader = """
     uniform sampler2D tInput;
     varying vec2 vUv;
-    #{require("shader/HDRChunk")}
     vec3 pow(vec3 v, float e){
       return vec3(
         pow(v.x, e),
@@ -20,7 +19,7 @@ module.exports = class ToneMapShader extends THREE.ShaderMaterial
       );
     }
     void main() {
-      vec3 color = fromHDR(texture2D(tInput, vUv).xyz);
+      vec3 color = texture2D(tInput, vUv).xyz;
       gl_FragColor = vec4(pow(color, 0.454545455), 1.0 );
     }
     """

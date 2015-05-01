@@ -7,7 +7,7 @@ module.exports = class Game
   constructor: (@element) ->
     @renderer = new THREE.WebGLRenderer(autoClearColor: false)
     @renderer.setClearColor(0x000000, 0)
-    @composer = new WAGNER.Composer(@renderer, type: THREE.FloatType)
+    @composer = new WAGNER.Composer(@renderer) #, type: THREE.FloatType)
     @width = 0
     @height = 0
     @aspect = 0
